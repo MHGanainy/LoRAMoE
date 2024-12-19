@@ -26,6 +26,7 @@ import torch.nn.functional as F
 from transformers.pytorch_utils import Conv1D
 
 from ..utils import PeftConfig, PeftType, transpose
+from transformers.pytorch_utils import Conv1D
 
 
 @dataclass
@@ -148,8 +149,11 @@ class LoraModel(torch.nn.Module):
                 parent, target, target_name = self._get_submodules(key)
                 bias = target.bias is not None
 
-                if isinstance(target, torch.nn.Linear) and self.peft_config.enable_lora is None:
+                if isinstance(target, (torch.nn.Linear)) and self.peft_config.enable_lora is None:
                     new_module = Linear(target.in_features, target.out_features, bias=bias, **kwargs)
+                if isinstance(target, (Conv1D)) and self.peft_config.enable_lora is None:
+                    in_features, out_features = (target.weight.ds_shape if hasattr(target.weight, "ds_shape") else target.weight.shape)
+                    new_module = Linear(in_features, out_features, bias=bias, **kwargs)
 
                 self._replace_module(parent, target_name, new_module, target)
         if not is_target_modules_in_base_model:
@@ -269,7 +273,7 @@ class Linear(nn.Linear, LoraLayer):
         blc_alpha: float = 0.0,
         blc_weight: float = 0.0,
         lora_dropout: float = 0.0,
-        fan_in_fan_out: bool = False,  # Set this to True if the layer to replace stores weight like (fan_in, fan_out)
+        fan_in_fan_out: bool = True,  # Set this to True if the layer to replace stores weight like (fan_in, fan_out)
         merge_weights: bool = True,
         **kwargs,
     ):
@@ -341,6 +345,7 @@ class Linear(nn.Linear, LoraLayer):
             result = F.linear(x, transpose(self.weight, self.fan_in_fan_out), bias=self.bias)
             raise ImportError(":(") 
         elif self.r > 0 and not self.merged:
+            # breakpoint()
             result = F.linear(x, transpose(self.weight, self.fan_in_fan_out), bias=self.bias)
             
             if self.r > 0:
@@ -362,5 +367,5 @@ class Linear(nn.Linear, LoraLayer):
                     ).flatten()
                 ) * self.blc_weight
 
-        return result, blcls
+        return result
 

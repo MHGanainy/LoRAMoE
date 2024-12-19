@@ -20,7 +20,8 @@ Here is the full list of checkpoints on the hub that can be fine-tuned by this s
 https://huggingface.co/models?filter=text-generation
 """
 # You can also adapt this script on your own causal language modeling task. Pointers for this are left as comments.
-
+import pdb
+import multiprocessing
 import logging
 import math
 import os
@@ -29,6 +30,7 @@ from dataclasses import dataclass, field
 from typing import Optional
 from pathlib import Path
 import datasets
+from datasets import load_dataset
 import torch
 from build_dataset import build_instruction_dataset, DataCollatorForSupervisedDataset
 import transformers
@@ -37,6 +39,7 @@ from transformers import (
     AutoConfig,
     BitsAndBytesConfig,
     LlamaForCausalLM,
+    GPT2LMHeadModel,
     LlamaTokenizer,
     AutoTokenizer,
     HfArgumentParser,
@@ -388,7 +391,6 @@ def main():
         logger.info(f"Num eval_samples  {len(eval_dataset)}")
         logger.info(f"Evaluation example input: {tokenizer.decode(eval_dataset[0]['input_ids'])}")
         logger.info(f"Evaluation example: {eval_dataset[0]}")
-
     torch_dtype = (
         model_args.torch_dtype
         if model_args.torch_dtype in ["auto", None]
@@ -418,7 +420,7 @@ def main():
     if quantization_config is not None:
         logger.info(f"quantization_config:{quantization_config.to_dict()}")
     device_map = {"":int(os.environ.get("LOCAL_RANK") or 0)}
-    model = LlamaForCausalLM.from_pretrained(
+    model = GPT2LMHeadModel.from_pretrained(
         model_args.model_name_or_path,
         config=config,
         cache_dir=model_args.cache_dir,
@@ -480,7 +482,8 @@ def main():
             lora_nums=lora_nums,
             blc_alpha=blc_alpha,
             blc_weight=blc_weight,
-            modules_to_save=modules_to_save
+            modules_to_save=modules_to_save,
+            fan_in_fan_out=True
             )
         
         model = get_peft_model(model, peft_config)
@@ -521,6 +524,60 @@ def main():
 
 
     training_args.remove_unused_columns = False
+    block_size=1024
+    dataset = load_dataset('MHGanainy/multi_clustering', 'lex-former-8-clustered-instance-b-dataset-cluster')
+    def tokenize_function(examples):
+        # Tokenize the text
+        result = tokenizer(
+            examples["original_text"],
+            padding='max_length',
+            max_length=block_size,
+            truncation=True,
+        )
+        input_ids = result["input_ids"]
+
+        # Copy input_ids to labels
+        labels = input_ids.copy()
+
+        # Set the first 512 tokens of labels to -100
+        labels = [[-100]*512 + ids[512:] for ids in labels]
+
+        # Set labels to -100 where input_ids == pad_token_id
+        labels = [
+            [label if input_id != tokenizer.pad_token_id else -100 for input_id, label in zip(input_ids_seq, labels_seq)]
+            for input_ids_seq, labels_seq in zip(input_ids, labels)
+        ]
+        result["labels"] = labels
+
+        return result
+
+    def prepare_dataset(dataset_split, split="train"):
+        total_cores = multiprocessing.cpu_count()
+        num_cpu_cores = min(64, total_cores)
+        print(f"Using {num_cpu_cores} CPU cores for '{split}' dataset processing.")
+
+        lm_dataset = dataset_split.map(
+            tokenize_function,
+            batched=True,
+            remove_columns=dataset_split.column_names,
+            desc=f"Tokenizing {split} dataset",
+            num_proc=num_cpu_cores,
+            # Ensure deterministic shuffling
+            load_from_cache_file=True,
+            writer_batch_size=1000,
+        )
+
+        lm_dataset.set_format(type='torch', columns=['input_ids', 'attention_mask', 'labels'])
+        return lm_dataset
+
+    print("Preprocessing training data...")
+    train_dataset = prepare_dataset(dataset["train"], "train")
+
+    print("Preprocessing validation data...")
+    eval_dataset = prepare_dataset(dataset["validation"], "validation")
+
+    # breakpoint()
+
     # Initialize our Trainer
     trainer = Trainer(
         model=model,
@@ -528,7 +585,8 @@ def main():
         train_dataset=train_dataset,
         eval_dataset=eval_dataset,
         tokenizer=tokenizer,
-        data_collator=data_collator
+        # data_collator=data_collator,
+        
     )
     trainer.add_callback(SavePeftModelCallback)
 

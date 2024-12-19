@@ -7,38 +7,37 @@ export PATH=${CUDA_HOME}/bin:${PATH}
 # export NCCL_DEBUG=info
 
 lr=0.0002
-lora_rank=4
-lora_alpha=32
-lora_trainable="gate_proj,down_proj,up_proj"
-lora_dropout=0.05
-lora_nums=8
+lora_rank=13
+lora_alpha=26
+lora_trainable="c_attn,c_proj"
+lora_dropout=0.01
+lora_nums=5
 blc_alpha=0.0
 blc_weight=0.0
 
 
-pretrained_model=/public/LoRAMoE/llama2-7b
-tokenizer_path=/public/LoRAMoE/llama2-7b
-dataset_dir=/public/LoRAMoE/data/tiny_data/train
-validation_file=/public/LoRAMoE/data/tiny_data/test.json
+pretrained_model="openai-community/gpt2-xl"
+tokenizer_path="openai-community/gpt2-xl"
+dataset_dir=/root/LoRAMoE/data/tiny_data/train
+validation_file=/root/LoRAMoE/data/tiny_data/test.json
 
 per_device_train_batch_size=1
 per_device_eval_batch_size=1
 gradient_accumulation_steps=1
 max_seq_length=1024
-output_dir=/public/LoRAMoE/output
+output_dir=/root/LoRAMoE/output
 exp_name=0308_debug_format_for_opensource
 
 
 # deepspeed_config_file=ds_zero2_no_offload.json
-deepspeed_config_file=ds_zero3_offload.json
-
-CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7 \
+# deepspeed_config_file=ds_zero3_offload.json
+# --deepspeed ${deepspeed_config_file} \
+CUDA_VISIBLE_DEVICES=0 \
 CUDA_LAUNCH_BLOCKING=1 \
-torchrun --nnodes 1 --nproc_per_node 8 --node_rank 0 --master_port 29502 \
+torchrun --nnodes 1 --nproc_per_node 1  \
     run_loramoe.py \
-    --deepspeed ${deepspeed_config_file} \
     --model_name_or_path ${pretrained_model} \
-    --tokenizer_name_or_path ${tokenizer_path} \
+    --tokenizer_name ${tokenizer_path} \
     --dataset_dir ${dataset_dir} \
     --per_device_train_batch_size ${per_device_train_batch_size} \
     --per_device_eval_batch_size ${per_device_eval_batch_size} \
@@ -53,7 +52,7 @@ torchrun --nnodes 1 --nproc_per_node 8 --node_rank 0 --master_port 29502 \
     --weight_decay 0 \
     --logging_strategy steps \
     --logging_steps 10 \
-    --save_strategy steps \
+    --save_strategy no \
     --save_total_limit 5 \
     --evaluation_strategy steps \
     --eval_steps 5000 \
@@ -77,4 +76,4 @@ torchrun --nnodes 1 --nproc_per_node 8 --node_rank 0 --master_port 29502 \
     --ddp_find_unused_parameters False \
     --flash_attn \
     --overwrite_output_dir \
-    &> /public/LoRAMoE/output/log/${exp_name}.log
+    --report_to none

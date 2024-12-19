@@ -6,3 +6,8 @@ single_lora_run_sft.sh
 run_loramoe_bak.sh
 data/tiny_data/test_1024
 data/tiny_data/train/train_1024
+__pycache__/*
+peft/__pycache__/*
+peft/tuners/__pycache__/*
+transformers/__pycache__/*
+__pycache__/*
