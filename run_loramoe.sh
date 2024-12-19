@@ -16,8 +16,8 @@ blc_alpha=0.0
 blc_weight=0.0
 
 
-pretrained_model="openai-community/gpt2"
-tokenizer_path="openai-community/gpt2"
+pretrained_model="openai-community/gpt2-large"
+tokenizer_path="openai-community/gpt2-large"
 dataset_dir=/root/LoRAMoE/data/tiny_data/train
 validation_file=/root/LoRAMoE/data/tiny_data/test.json
 
@@ -35,8 +35,8 @@ exp_name=0308_debug_format_for_opensource
 # --load_in_kbits 16 \
 CUDA_VISIBLE_DEVICES=0 \
 CUDA_LAUNCH_BLOCKING=1 \
-# torchrun --nnodes 1 --nproc_per_node 1  \
-python run_loramoe.py \
+torchrun --nnodes 1 --nproc_per_node 1  \
+    run_loramoe.py \
     --model_name_or_path ${pretrained_model} \
     --tokenizer_name ${tokenizer_path} \
     --dataset_dir ${dataset_dir} \
