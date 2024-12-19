@@ -16,14 +16,14 @@ blc_alpha=0.0
 blc_weight=0.0
 
 
-pretrained_model="openai-community/gpt2-large"
-tokenizer_path="openai-community/gpt2-large"
+pretrained_model="openai-community/gpt2-xl"
+tokenizer_path="openai-community/gpt2-xl"
 dataset_dir=/root/LoRAMoE/data/tiny_data/train
 validation_file=/root/LoRAMoE/data/tiny_data/test.json
 
 per_device_train_batch_size=1
 per_device_eval_batch_size=1
-gradient_accumulation_steps=8
+gradient_accumulation_steps=1
 max_seq_length=1024
 output_dir=/root/LoRAMoE/output
 exp_name=0308_debug_format_for_opensource
