@@ -16,14 +16,14 @@ blc_alpha=0.0
 blc_weight=0.0
 
 
-pretrained_model="openai-community/gpt2-xl"
-tokenizer_path="openai-community/gpt2-xl"
+pretrained_model="openai-community/gpt2"
+tokenizer_path="openai-community/gpt2"
 dataset_dir=/root/LoRAMoE/data/tiny_data/train
 validation_file=/root/LoRAMoE/data/tiny_data/test.json
 
 per_device_train_batch_size=1
 per_device_eval_batch_size=1
-gradient_accumulation_steps=1
+gradient_accumulation_steps=8
 max_seq_length=1024
 output_dir=/root/LoRAMoE/output
 exp_name=0308_debug_format_for_opensource
@@ -32,10 +32,11 @@ exp_name=0308_debug_format_for_opensource
 # deepspeed_config_file=ds_zero2_no_offload.json
 # deepspeed_config_file=ds_zero3_offload.json
 # --deepspeed ${deepspeed_config_file} \
+# --load_in_kbits 16 \
 CUDA_VISIBLE_DEVICES=0 \
 CUDA_LAUNCH_BLOCKING=1 \
-torchrun --nnodes 1 --nproc_per_node 1  \
-    run_loramoe.py \
+# torchrun --nnodes 1 --nproc_per_node 1  \
+python run_loramoe.py \
     --model_name_or_path ${pretrained_model} \
     --tokenizer_name ${tokenizer_path} \
     --dataset_dir ${dataset_dir} \
@@ -51,12 +52,10 @@ torchrun --nnodes 1 --nproc_per_node 1  \
     --warmup_ratio 0.03 \
     --weight_decay 0 \
     --logging_strategy steps \
-    --logging_steps 10 \
+    --logging_steps 100 \
     --save_strategy no \
     --save_total_limit 5 \
-    --evaluation_strategy steps \
-    --eval_steps 5000 \
-    --save_steps 5000 \
+    --evaluation_strategy no \
     --gradient_accumulation_steps ${gradient_accumulation_steps} \
     --preprocessing_num_workers 8 \
     --max_seq_length ${max_seq_length} \
@@ -72,7 +71,6 @@ torchrun --nnodes 1 --nproc_per_node 1  \
     --lora_dropout ${lora_dropout} \
     --torch_dtype bfloat16 \
     --validation_file ${validation_file} \
-    --load_in_kbits 16 \
     --ddp_find_unused_parameters False \
     --flash_attn \
     --overwrite_output_dir \

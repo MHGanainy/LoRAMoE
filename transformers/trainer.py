@@ -16,6 +16,8 @@
 The Trainer class, to easily train a 🤗 Transformers from scratch or finetune it on a new task.
 """
 
+import torch
+from torchviz import make_dot
 import contextlib
 import functools
 import glob
