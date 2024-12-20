@@ -16,13 +16,13 @@ blc_alpha=0.0
 blc_weight=0.0
 
 
-pretrained_model="openai-community/gpt2-xl"
-tokenizer_path="openai-community/gpt2-xl"
+pretrained_model="openai-community/gpt2"
+tokenizer_path="openai-community/gpt2"
 dataset_dir=/root/LoRAMoE/data/tiny_data/train
 validation_file=/root/LoRAMoE/data/tiny_data/test.json
 
-per_device_train_batch_size=1
-per_device_eval_batch_size=1
+per_device_train_batch_size=8
+per_device_eval_batch_size=8
 gradient_accumulation_steps=1
 max_seq_length=1024
 output_dir=/root/LoRAMoE/output
@@ -33,9 +33,9 @@ exp_name=0308_debug_format_for_opensource
 # deepspeed_config_file=ds_zero3_offload.json
 # --deepspeed ${deepspeed_config_file} \
 # --load_in_kbits 16 \
-CUDA_VISIBLE_DEVICES=0 \
+CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7 \
 CUDA_LAUNCH_BLOCKING=1 \
-torchrun --nnodes 1 --nproc_per_node 1  \
+torchrun --nnodes 1 --nproc_per_node 8  \
     run_loramoe.py \
     --model_name_or_path ${pretrained_model} \
     --tokenizer_name ${tokenizer_path} \

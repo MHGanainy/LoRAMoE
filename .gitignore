@@ -11,3 +11,4 @@ peft/__pycache__/*
 peft/tuners/__pycache__/*
 transformers/__pycache__/*
 __pycache__/*
+peft/utils/__pycache__/*

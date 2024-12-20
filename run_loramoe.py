@@ -21,8 +21,6 @@ https://huggingface.co/models?filter=text-generation
 """
 # You can also adapt this script on your own causal language modeling task. Pointers for this are left as comments.
 import pdb
-import torch
-from torchviz import make_dot
 import multiprocessing
 import logging
 import math
