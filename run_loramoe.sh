@@ -23,7 +23,7 @@ validation_file=/root/LoRAMoE/data/tiny_data/test.json
 
 per_device_train_batch_size=1
 per_device_eval_batch_size=1
-gradient_accumulation_steps=1
+gradient_accumulation_steps=8
 max_seq_length=1024
 output_dir=/root/LoRAMoE/output
 exp_name=0308_debug_format_for_opensource
