@@ -22,8 +22,11 @@ https://huggingface.co/models?filter=text-generation
 # You can also adapt this script on your own causal language modeling task. Pointers for this are left as comments.
 import pdb
 import multiprocessing
+from huggingface_hub import hf_hub_download
 import logging
 import math
+import re
+import safetensors
 import os
 import sys
 from dataclasses import dataclass, field
@@ -571,14 +574,92 @@ def main():
         return lm_dataset
 
     print("Preprocessing training data...")
-    train_dataset = prepare_dataset(dataset["train"], "train")
+    train_dataset = prepare_dataset(dataset["train"].select(range(0,1000)), "train")
 
     print("Preprocessing validation data...")
-    eval_dataset = prepare_dataset(dataset["validation"], "validation")
+    eval_dataset = prepare_dataset(dataset["validation"].select(range(0,1000)), "validation")
 
     # breakpoint()
     model.print_trainable_parameters()
 
+    with open("trainable_parameters.txt", "w", encoding="utf-8") as f:
+        for name, param in model.named_parameters():
+            if param.requires_grad:
+              shape_str = "x".join(str(s) for s in param.shape)
+              f.write(f"{name}\t({shape_str})\t{param.dtype}\n")
+
+    #  My Shit!!
+    def assign_lora_weights(adapter_state_dict, my_model, adapter_idx=0):
+        # breakpoint()
+        model_state_dict = my_model.state_dict()
+
+        for old_key in adapter_state_dict.keys():
+            # e.g.: old_key = "base_model.model.transformer.h.0.attn.c_attn.lora_A.weight"
+            # We want to rename it to "base_model.model.transformer.h.0.attn.c_attn.lora_A0.weight"
+            # A simple approach: insert a "0" before ".weight" for both lora_A and lora_B.
+            new_key = re.sub(
+            r"(lora_[AB])(\.weight)",
+            rf"\g<1>{adapter_idx}\2",
+            old_key
+        )
+            # e.g.: new_key = "base_model.model.transformer.h.0.attn.c_attn.lora_A0.weight"
+            # breakpoint()
+            # If the new_key does not exist in my_model, skip
+            if new_key not in model_state_dict:
+                print(f"Skipping {old_key} -> {new_key}; not in my_model.")
+                continue
+
+            # Load the adapter param as float32, then cast to the model’s dtype
+            param_data = adapter_state_dict[old_key].float()
+            target_param = model_state_dict[new_key]
+            desired_dtype = target_param.dtype  # e.g. torch.bfloat16
+
+            # Copy with dtype conversion
+            print(f"Copying {old_key} -> {new_key}; shape={list(param_data.shape)} dtype={desired_dtype}")
+            target_param.copy_(param_data.to(desired_dtype))
+
+    def load_multiple_adapters_into_model(model):
+        # List all repo IDs in order
+        adapter_repos = [
+            "MHGanainy/gpt2-xl-lora-multi-512-k5-0",
+            "MHGanainy/gpt2-xl-lora-multi-512-k5-1",
+            "MHGanainy/gpt2-xl-lora-multi-512-k5-2",
+            "MHGanainy/gpt2-xl-lora-multi-512-k5-3",
+            "MHGanainy/gpt2-xl-lora-multi-512-k5-4",
+        ]
+
+        # Loop through each repo, download and load the LoRA state dict, then assign
+        for i, repo_id in enumerate(adapter_repos):
+            adapter_weights_path = hf_hub_download(
+                repo_id=repo_id,
+                filename="adapter_model.safetensors",
+                revision=None,
+            )
+            adapter_state_dict = safetensors.torch.load_file(
+                adapter_weights_path, 
+                device="cpu"
+            )
+            assign_lora_weights(adapter_state_dict, model, adapter_idx=i)
+
+        print("All adapters loaded and assigned successfully!")
+
+    load_multiple_adapters_into_model(model)
+
+    def freeze_all_except_router(model):
+        for name, param in model.named_parameters():
+            if "lora_route" in name:
+                param.requires_grad = True
+                print(f"Trainable (router): {name}")
+            else:
+                param.requires_grad = False
+                # print(f"Frozen: {name}")  
+    freeze_all_except_router(model)
+
+    with open("trainable_parameters-after.txt", "w", encoding="utf-8") as f:
+        for name, param in model.named_parameters():
+            if param.requires_grad:
+              shape_str = "x".join(str(s) for s in param.shape)
+              f.write(f"{name}\t({shape_str})\t{param.dtype}\n")
     # Initialize our Trainer
     trainer = Trainer(
         model=model,
