@@ -527,6 +527,68 @@ def main():
 
 
     training_args.remove_unused_columns = False
+######################################
+    import pandas as pd
+    import numpy as np
+    from datasets import Dataset
+
+    def sample_by_group_with_max(
+        hf_dataset,
+        group_col: str,
+        fraction: float = 0.01,
+        random_state: int = 42,
+        oversample: bool = False
+    ):
+        """
+        1. Convert the Hugging Face dataset to a pandas DataFrame.
+        2. Group by `group_col`.
+        3. Find the largest group size (max group length).
+        4. Compute sample_size = fraction * largest_group_size.
+        5. Sample exactly sample_size rows from each group.
+        - If oversample=True, use sample(..., replace=True) for groups with fewer rows.
+        - Otherwise, sample the minimum of sample_size and group size.
+        6. Convert the result back to a Hugging Face Dataset.
+        """
+        # Step 1: Convert to pandas
+        df = hf_dataset.to_pandas()
+
+        # Step 2: Group by group_col
+        grouped = df.groupby(group_col)
+
+        # Step 3: Find largest group size
+        max_group_size = grouped.size().max()
+
+        # Step 4: Determine how many rows to sample per group
+        sample_size = int(np.floor(max_group_size * fraction))
+        print(f"Fraction = {fraction}, Max group size = {max_group_size}, "
+            f"sampling {sample_size} rows from each group.")
+
+        # Step 5: Sample from each group
+        if oversample:
+            # Oversample if a group has fewer rows than sample_size
+            df_sampled = grouped.apply(
+                lambda x: x.sample(
+                    n=sample_size,
+                    random_state=random_state,
+                    replace=(len(x) < sample_size)  # Only oversample if needed
+                )
+            )
+        else:
+            # Downsample only if group is bigger than sample_size
+            df_sampled = grouped.apply(
+                lambda x: x.sample(
+                    n=min(sample_size, len(x)),
+                    random_state=random_state,
+                    replace=False
+                )
+            )
+
+        # groupby.apply creates a multi-index; reset to regular RangeIndex
+        df_sampled.reset_index(drop=True, inplace=True)
+
+        # Step 6: Convert back to Hugging Face Dataset
+        return Dataset.from_pandas(df_sampled)
+
     block_size=1024
     dataset = load_dataset('MHGanainy/multi_clustering', 'lex-former-8-clustered-instance-b-dataset-cluster')
     def tokenize_function(examples):
@@ -574,7 +636,18 @@ def main():
         return lm_dataset
 
     print("Preprocessing training data...")
-    train_dataset = prepare_dataset(dataset["train"], "train")
+    # sample = int(len(dataset["train"])*0.01)
+    # train_dataset = prepare_dataset(dataset["train"], "train").select(range(0,sample))
+    sampled_train = sample_by_group_with_max(
+        dataset["train"],
+        group_col="dataset_name",
+        fraction=0.01,       # e.g. 1% of the largest group
+        random_state=42,
+        oversample=False     # or True if you want to oversample smaller groups
+    )
+
+    # 2) Tokenize/map the new dataset
+    train_dataset = prepare_dataset(sampled_train, "train")
 
     print("Preprocessing validation data...")
     eval_dataset = prepare_dataset(dataset["validation"], "validation")
@@ -660,6 +733,7 @@ def main():
             if param.requires_grad:
               shape_str = "x".join(str(s) for s in param.shape)
               f.write(f"{name}\t({shape_str})\t{param.dtype}\n")
+
     # Initialize our Trainer
     trainer = Trainer(
         model=model,
